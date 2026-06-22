@@ -1,0 +1,44 @@
+<meta charset="utf-8" />
+<link rel="stylesheet" href="popup.css" />
+<div class="wrap">
+  <h1>IG Live 工具</h1>
+
+  <label>Gemini API Key</label>
+  <input id="key" type="password" placeholder="貼上你的 Gemini API Key" />
+
+  <label>翻譯目標語言</label>
+  <input id="lang" type="text" placeholder="繁體中文" />
+
+  <label>模型</label>
+  <select id="model">
+    <option value="gemini-2.5-flash">gemini-2.5-flash（快、推薦）</option>
+    <option value="gemini-flash-latest">gemini-flash-latest（自動最新）</option>
+    <option value="gemini-2.5-pro">gemini-2.5-pro（較準、較慢）</option>
+  </select>
+
+  <label>每段音訊秒數（翻譯延遲）：<span id="secVal">6</span> 秒</label>
+  <input id="sec" type="range" min="3" max="15" step="1" value="6" />
+
+  <label class="row"><input id="dual" type="checkbox" /> 雙語字幕（原文 + 翻譯）</label>
+
+  <label>錄影畫質</label>
+  <select id="bitrate">
+    <option value="6000000">標準（6 Mbps，檔案小）</option>
+    <option value="10000000">高（10 Mbps）</option>
+    <option value="16000000">超高（16 Mbps，檔案大）</option>
+  </select>
+
+  <button id="save">儲存設定</button>
+
+  <div class="divider"></div>
+
+  <div class="btns">
+    <button id="rec" class="ghost">● 開始/停止錄影</button>
+    <button id="trans" class="ghost">字 開始/停止翻譯</button>
+    <button id="rot" class="ghost">↻ 旋轉 90°</button>
+  </div>
+
+  <p class="hint">操作面板也會直接顯示在 IG 直播頁面右上角，可拖曳移動。</p>
+  <p id="status" class="status"></p>
+</div>
+<script src="popup.js"></script>

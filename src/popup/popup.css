@@ -1,0 +1,41 @@
+body { margin: 0; }
+.wrap {
+  width: 280px;
+  padding: 14px;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: #17171b;
+  color: #fff;
+  box-sizing: border-box;
+}
+h1 { font-size: 16px; margin: 0 0 12px; }
+label { display: block; font-size: 12px; opacity: 0.75; margin: 10px 0 4px; }
+label.row { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: 0.9; margin-top: 12px; }
+label.row input { width: auto; }
+input[type="text"], input[type="password"], select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #26262c;
+  border: 1px solid #3a3a42;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+input[type="range"] { width: 100%; }
+button {
+  margin-top: 12px;
+  width: 100%;
+  background: #e1306c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+button.ghost { background: #303036; margin-top: 8px; }
+button:hover { opacity: 0.9; }
+.divider { height: 1px; background: #2e2e36; margin: 14px 0 4px; }
+.btns button { width: 100%; }
+.hint { font-size: 11px; opacity: 0.6; line-height: 1.5; margin: 12px 0 0; }
+.status { font-size: 12px; color: #6cd06c; min-height: 16px; margin: 6px 0 0; }

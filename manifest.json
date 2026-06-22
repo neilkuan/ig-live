@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "IG Live 錄製 + Gemini 即時翻譯",
+  "version": "0.1.0",
+  "description": "錄製 Instagram 直播、用 Gemini 即時翻譯字幕，並可校正橫/直向畫面。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "IG Live 工具",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["src/content/wav.js", "src/content/content.js"],
+      "css": ["src/content/overlay.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/overlay.css", "src/content/pcm-worklet.js"],
+      "matches": ["https://www.instagram.com/*"]
+    }
+  ]
+}

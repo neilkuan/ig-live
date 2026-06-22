@@ -1,0 +1,150 @@
+#iglive-panel {
+  position: fixed;
+  top: 90px;
+  right: 16px;
+  z-index: 2147483646;
+  background: rgba(20, 20, 24, 0.92);
+  color: #fff;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 13px;
+  border-radius: 12px;
+  padding: 10px;
+  width: 220px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  backdrop-filter: blur(8px);
+}
+#iglive-panel .iglive-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+#iglive-panel .iglive-title {
+  font-weight: 700;
+  justify-content: space-between;
+  letter-spacing: 0.5px;
+}
+#iglive-panel #iglive-drag {
+  cursor: move;
+  opacity: 0.6;
+}
+#iglive-panel .iglive-label {
+  opacity: 0.7;
+  min-width: 32px;
+}
+#iglive-panel .iglive-small button {
+  width: 100%;
+}
+#iglive-panel button {
+  background: #303036;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+  flex: 1;
+}
+#iglive-panel button:hover {
+  background: #44444c;
+}
+#iglive-panel button.active {
+  background: #e1306c;
+}
+#iglive-panel #iglive-trans.active {
+  animation: iglive-blink 1s ease-in-out infinite;
+}
+
+@keyframes iglive-blink {
+  0%, 100% { background: #e1306c; box-shadow: 0 0 0 0 rgba(225, 48, 108, 0.7); }
+  50% { background: #ff5c8d; box-shadow: 0 0 0 6px rgba(225, 48, 108, 0); }
+}
+
+#iglive-trans-indicator {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(20, 20, 24, 0.92);
+  color: #fff;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(225, 48, 108, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  animation: iglive-indicator-fade 1.4s ease-in-out infinite;
+}
+#iglive-trans-indicator .iglive-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  animation: iglive-dot-blink 1s steps(1, end) infinite;
+}
+
+@keyframes iglive-dot-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+@keyframes iglive-indicator-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.78; }
+}
+#iglive-panel #iglive-rot {
+  min-width: 36px;
+  text-align: center;
+  opacity: 0.9;
+}
+
+#iglive-subtitle {
+  position: fixed;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483646;
+  max-width: 80vw;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  line-height: 1.4;
+  padding: 8px 16px;
+  border-radius: 10px;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+#iglive-subtitle .iglive-sub-original {
+  font-size: 16px;
+  font-weight: 500;
+  color: #d6d6d6;
+  margin-bottom: 2px;
+}
+#iglive-subtitle .iglive-sub-translation {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+#iglive-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  background: rgba(225, 48, 108, 0.95);
+  color: #fff;
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 20px;
+}
