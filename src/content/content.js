@@ -15,10 +15,14 @@
     recordChunks: [],
     rafId: null,
     canvas: null,
+    // 共用音訊管線：錄影與翻譯共用同一個 context 與 source，避免互搶同一條音訊軌
+    audioCtxShared: null,
+    audioSourceShared: null,
+    recDest: null, // 錄影輸出的 MediaStreamDestination 節點
     // 翻譯
-    audioCtx: null,
     workletNode: null,
-    audioSource: null,
+    zeroGain: null,
+    translSink: null, // 翻譯用的無聲匯流節點（驅動 worklet，不碰喇叭）
     pcmChunks: [],
     flushTimer: null,
     currentSubtitle: "", // 翻譯
@@ -204,6 +208,30 @@
     return canvas.captureStream(30);
   }
 
+  // ---------- 共用音訊管線 ----------
+  // 錄影與翻譯共用同一個 AudioContext + 同一個 MediaStreamSource，
+  // 否則兩者各自對同一條音訊軌 createMediaStreamSource 會互搶，導致一邊幾秒後變靜音。
+  function ensureAudioGraph(video) {
+    if (state.audioCtxShared) return state.audioCtxShared;
+    const stream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
+    const at = stream.getAudioTracks();
+    if (!at.length) return null;
+    const ctx = new AudioContext();
+    if (ctx.state === "suspended") ctx.resume();
+    state.audioCtxShared = ctx;
+    state.audioSourceShared = ctx.createMediaStreamSource(new MediaStream([at[0]]));
+    return ctx;
+  }
+  // 兩個功能都停了才關閉共用管線
+  function maybeCloseAudioGraph() {
+    if (state.recording || state.translating) return;
+    if (state.audioCtxShared) {
+      try { state.audioCtxShared.close(); } catch (_) {}
+    }
+    state.audioCtxShared = null;
+    state.audioSourceShared = null;
+  }
+
   async function startRecording() {
     const v = state.video || findVideo();
     if (!v) {
@@ -213,13 +241,20 @@
     state.video = v;
 
     try {
-      const srcStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
-      const audioTracks = srcStream.getAudioTracks();
-
       const canvasStream = buildRotatedCanvasStream(v);
       const mixed = new MediaStream();
       canvasStream.getVideoTracks().forEach((t) => mixed.addTrack(t));
-      audioTracks.forEach((t) => mixed.addTrack(t));
+
+      // 音訊經共用管線重新產生一條與 canvas 影像軌同步、從 0 起算的音訊軌。
+      const ctx = ensureAudioGraph(v);
+      if (ctx) {
+        const dest = ctx.createMediaStreamDestination();
+        state.audioSourceShared.connect(dest);
+        dest.stream.getAudioTracks().forEach((t) => mixed.addTrack(t));
+        state.recDest = dest;
+      } else {
+        toast("抓不到音訊軌（可能是 DRM 串流），將只錄畫面");
+      }
 
       // 優先錄成 mp4（H.264/AAC，通訊軟體相容性最佳），不支援才退回 webm
       const candidates = [
@@ -274,6 +309,11 @@
       state.recorder.stop();
     }
     state.recorder = null;
+    if (state.recDest && state.audioSourceShared) {
+      try { state.audioSourceShared.disconnect(state.recDest); } catch (_) {}
+    }
+    state.recDest = null;
+    maybeCloseAudioGraph();
     updateOverlayLabels();
   }
 
@@ -291,17 +331,13 @@
     state.video = v;
 
     try {
-      const srcStream = v.captureStream ? v.captureStream() : v.mozCaptureStream();
-      const audioTracks = srcStream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        toast("抓不到音訊軌");
+      const audioCtx = ensureAudioGraph(v);
+      if (!audioCtx) {
+        toast("抓不到音訊軌（可能是 DRM 串流）");
         return;
       }
-      const audioStream = new MediaStream([audioTracks[0]]);
-      const audioCtx = new AudioContext();
       await audioCtx.audioWorklet.addModule(chrome.runtime.getURL("src/content/pcm-worklet.js"));
 
-      const source = audioCtx.createMediaStreamSource(audioStream);
       const workletNode = new AudioWorkletNode(audioCtx, "pcm-worklet");
       const zeroGain = audioCtx.createGain();
       zeroGain.gain.value = 0; // 不重複輸出聲音，只為了驅動處理
@@ -312,13 +348,17 @@
         state.pcmChunks.push(e.data); // 已是 Float32Array 副本
       };
 
-      source.connect(workletNode);
+      // 從共用 source 分流到翻譯用的 worklet（與錄影各自分流、互不搶軌）。
+      // 終點接「無聲匯流節點」而非喇叭：只為驅動 worklet 運轉，完全不碰音訊輸出裝置，
+      // 避免干擾錄影的音訊擷取。
+      const translSink = audioCtx.createMediaStreamDestination();
+      state.audioSourceShared.connect(workletNode);
       workletNode.connect(zeroGain);
-      zeroGain.connect(audioCtx.destination);
+      zeroGain.connect(translSink);
 
-      state.audioCtx = audioCtx;
-      state.audioSource = source;
       state.workletNode = workletNode;
+      state.zeroGain = zeroGain;
+      state.translSink = translSink;
       state.translating = true;
 
       const sec = Math.max(3, Number(state.settings.chunkSeconds) || 6);
@@ -371,16 +411,19 @@
     try {
       if (state.workletNode) {
         state.workletNode.port.onmessage = null;
+        // 只拆「共用 source → 翻譯 worklet」這條邊，不影響錄影分支
+        if (state.audioSourceShared) state.audioSourceShared.disconnect(state.workletNode);
         state.workletNode.disconnect();
       }
-      if (state.audioSource) state.audioSource.disconnect();
-      if (state.audioCtx) state.audioCtx.close();
+      if (state.zeroGain) state.zeroGain.disconnect();
     } catch (_) {}
     state.workletNode = null;
-    state.audioSource = null;
-    state.audioCtx = null;
+    state.zeroGain = null;
+    state.translSink = null;
+    state.pcmChunks = [];
     state.currentSubtitle = "";
     hideSubtitle();
+    maybeCloseAudioGraph();
     updateOverlayLabels();
   }
 
@@ -525,6 +568,7 @@
 
   // ---------- 啟動 ----------
   async function init() {
+    console.log("[iglive] content script 載入：共用音訊管線版（錄影+翻譯不搶軌）");
     if (window.top !== window.self && !findVideo()) return; // 子 frame 沒影片就不注入
     await loadSettings();
     buildOverlay();
