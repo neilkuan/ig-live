@@ -270,11 +270,36 @@
       const vbps = Math.max(1_000_000, Number(state.settings.bitrate) || 6_000_000);
       const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: vbps });
       console.log("[iglive] 錄影位元率:", (vbps / 1e6).toFixed(0) + " Mbps");
+      let chunkCount = 0;
+      let emptyChunks = 0;
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) state.recordChunks.push(e.data);
+        chunkCount++;
+        if (e.data && e.data.size > 0) {
+          state.recordChunks.push(e.data);
+        } else {
+          emptyChunks++;
+          // mp4 前 3 個 chunk 都是空的 → 此平台 mp4 錄製失敗，自動 fallback webm
+          if (isMp4 && emptyChunks >= 3 && state.recordChunks.length === 0) {
+            console.warn("[iglive] mp4 錄影失敗（chunks 為空），自動切換 webm 重啟");
+            recorder.stop();
+            state.recording = false;
+            state._fallbackWebm = true;
+          }
+        }
       };
       recorder.onstop = () => {
+        // 若觸發 fallback，自動以 webm 重新啟動錄影
+        if (state._fallbackWebm) {
+          state._fallbackWebm = false;
+          toast("mp4 錄製失敗，自動切換 webm 重新錄影");
+          setTimeout(() => startRecordingWithMime("video/webm;codecs=vp9,opus", mixed), 100);
+          return;
+        }
         const blob = new Blob(state.recordChunks, { type: blobType });
+        if (blob.size === 0) {
+          toast("錄影失敗：檔案大小為 0（格式不支援）");
+          return;
+        }
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -295,6 +320,58 @@
       console.error("[iglive] 錄影失敗", err);
       toast("錄影失敗：" + err.message);
     }
+  }
+
+  // fallback：以指定 mime 重新錄影（重用已建好的 mixed stream）
+  function startRecordingWithMime(fallbackMime, mixed) {
+    const mime = MediaRecorder.isTypeSupported(fallbackMime) ? fallbackMime : "video/webm";
+    const ext = "webm";
+    const blobType = "video/webm";
+    state.recordChunks = [];
+    const vbps = Math.max(1_000_000, Number(state.settings.bitrate) || 6_000_000);
+    const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: vbps });
+    console.log("[iglive] fallback 錄影格式:", mime);
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) state.recordChunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(state.recordChunks, { type: blobType });
+      if (blob.size === 0) { toast("錄影失敗：檔案大小為 0"); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      a.href = url;
+      a.download = `ig-live-${ts}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast(`錄影已儲存（${ext}）`);
+    };
+    recorder.start(1000);
+    state.recorder = recorder;
+    state.recording = true;
+    // 重啟 canvas draw loop
+    state.rafId = requestAnimationFrame(function draw() {
+      if (!state.recording) return;
+      const v = state.video;
+      const canvas = state.canvas;
+      if (!v || !canvas) return;
+      const ctx = canvas.getContext("2d");
+      const vw = v.videoWidth || canvas.width;
+      const vh = v.videoHeight || canvas.height;
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((state.rotation * Math.PI) / 180);
+      if (state.flip) ctx.scale(-1, 1);
+      ctx.drawImage(v, -vw / 2, -vh / 2, vw, vh);
+      ctx.restore();
+      if (state.currentSubtitle || state.currentOriginal)
+        drawSubtitleOnCanvas(ctx, canvas, state.currentSubtitle, state.currentOriginal);
+      state.rafId = requestAnimationFrame(draw);
+    });
+    updateOverlayLabels();
+    toast("已切換 webm 格式，繼續錄影中");
   }
 
   function stopRecording() {
