@@ -252,19 +252,22 @@
         toast("抓不到音訊軌（可能是 DRM 串流），將只錄畫面");
       }
 
-      // 優先錄成 mp4（H.264/AAC，通訊軟體相容性最佳），不支援才退回 webm
-      const candidates = [
-        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-        "video/mp4;codecs=h264,aac",
-        "video/mp4",
-        "video/webm;codecs=vp9,opus",
-        "video/webm",
-      ];
+      // macOS 優先 mp4（相容性佳）；Windows/Linux 優先 webm（mp4 canvas 錄製不穩定）
+      const isWin = navigator.platform.indexOf("Win") !== -1;
+      const candidates = isWin
+        ? ["video/webm;codecs=vp9,opus", "video/webm", "video/mp4"]
+        : [
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=h264,aac",
+            "video/mp4",
+            "video/webm;codecs=vp9,opus",
+            "video/webm",
+          ];
       const mime = candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "video/webm";
       const isMp4 = mime.startsWith("video/mp4");
       const ext = isMp4 ? "mp4" : "webm";
       const blobType = isMp4 ? "video/mp4" : "video/webm";
-      console.log("[iglive] 錄影格式:", mime);
+      console.log("[iglive] 錄影格式:", mime, isWin ? "(Windows)" : "(macOS)");
 
       state.recordChunks = [];
       const vbps = Math.max(1_000_000, Number(state.settings.bitrate) || 6_000_000);
