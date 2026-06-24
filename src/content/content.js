@@ -69,15 +69,11 @@
     const rot = state.rotation;
     let transform = `rotate(${rot}deg)`;
     if (state.flip) transform += " scaleX(-1)";
-    // 旋轉 90/270 時長寬互換：以「視窗」為基準放到最大，但不放大超過原生（避免模糊）
+    // 旋轉 90/270 時長寬互換：放大填滿容器可用空間
     if (rot === 90 || rot === 270) {
       const rect = v.getBoundingClientRect();
-      // 旋轉後在螢幕上的footprint：寬=原本高、高=原本寬
-      const footW = rect.height || 1;
-      const footH = rect.width || 1;
-      const vw = window.innerWidth || footW;
-      const vh = window.innerHeight || footH;
-      const scale = Math.min(vw / footW, vh / footH, 1);
+      // 旋轉後 footprint：寬變高、高變寬
+      const scale = rect.width / rect.height;
       transform += ` scale(${scale})`;
     }
     v.style.transform = transform;
