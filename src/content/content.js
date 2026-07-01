@@ -24,6 +24,7 @@
     zeroGain: null,
     translSink: null, // 翻譯用的無聲匯流節點（驅動 worklet，不碰喇叭）
     pcmChunks: [],
+    pcmSampleCount: 0, // pcmChunks 目前累積的樣本總數，用於裁切上限判斷
     flushTimer: null,
     currentSubtitle: "", // 翻譯
     currentOriginal: "", // 原文
@@ -419,9 +420,21 @@
       zeroGain.gain.value = 0; // 不重複輸出聲音，只為了驅動處理
 
       state.pcmChunks = [];
+      state.pcmSampleCount = 0;
+      // PCM 累積上限：以 chunkSeconds 的 3 倍時長為安全上限，
+      // 防止 Gemini 呼叫逾時/卡住時 pcmChunks 無上限累積造成記憶體風險。
+      const maxPcmSeconds = Math.max(9, (Number(state.settings.chunkSeconds) || 6) * 3);
+      const maxPcmSamples = Math.round(maxPcmSeconds * audioCtx.sampleRate);
       workletNode.port.onmessage = (e) => {
         if (!state.translating) return;
         state.pcmChunks.push(e.data); // 已是 Float32Array 副本
+        state.pcmSampleCount += e.data.length;
+        // 超過上限就從最舊的 chunk 開始丟棄，避免無限增長
+        while (state.pcmSampleCount > maxPcmSamples && state.pcmChunks.length > 1) {
+          const dropped = state.pcmChunks.shift();
+          state.pcmSampleCount -= dropped.length;
+          console.warn("[iglive] PCM 緩衝區超過上限，已丟棄最舊音訊片段");
+        }
       };
 
       // 從共用 source 分流到翻譯用的 worklet（與錄影各自分流、互不搶軌）。
@@ -449,10 +462,23 @@
     }
   }
 
+  // sendMessage 逾時保護：Gemini 呼叫若卡住不回應，逾時後視為失敗並繼續下一輪 flush，
+  // 避免整條翻譯管線被卡住、間接導致 pcmChunks 持續堆積。
+  const TRANSLATE_TIMEOUT_MS = 15000;
+  function sendMessageWithTimeout(message, timeoutMs) {
+    return Promise.race([
+      chrome.runtime.sendMessage(message),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("sendMessage 逾時")), timeoutMs)
+      ),
+    ]);
+  }
+
   async function flushAndTranslate(sampleRate) {
     if (state.pcmChunks.length === 0) return;
     const merged = mergeChunks(state.pcmChunks);
     state.pcmChunks = [];
+    state.pcmSampleCount = 0;
     // 音量太小（可能沒人說話）就跳過，省 API 用量
     let energy = 0;
     for (let i = 0; i < merged.length; i += 64) energy += Math.abs(merged[i]);
@@ -461,13 +487,16 @@
     const wav = encodeWAV(merged, sampleRate);
     const base64 = await blobToBase64(wav);
     try {
-      const resp = await chrome.runtime.sendMessage({
-        type: "translate",
-        audioBase64: base64,
-        mimeType: "audio/wav",
-        targetLang: state.settings.targetLang,
-        model: state.settings.model,
-      });
+      const resp = await sendMessageWithTimeout(
+        {
+          type: "translate",
+          audioBase64: base64,
+          mimeType: "audio/wav",
+          targetLang: state.settings.targetLang,
+          model: state.settings.model,
+        },
+        TRANSLATE_TIMEOUT_MS
+      );
       if (resp && resp.ok) {
         const translation = (resp.translation || resp.text || "").trim();
         const original = (resp.original || "").trim();
@@ -476,7 +505,8 @@
         console.warn("[iglive] 翻譯錯誤", resp.error);
       }
     } catch (err) {
-      console.warn("[iglive] sendMessage 失敗", err);
+      // 逾時或 sendMessage 失敗：記錄警告即可，不中斷翻譯迴圈，下一輪 flush 正常繼續
+      console.warn("[iglive] 翻譯逾時或 sendMessage 失敗", err.message || err);
     }
   }
 
@@ -497,6 +527,7 @@
     state.zeroGain = null;
     state.translSink = null;
     state.pcmChunks = [];
+    state.pcmSampleCount = 0;
     state.currentSubtitle = "";
     hideSubtitle();
     maybeCloseAudioGraph();

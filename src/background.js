@@ -43,11 +43,17 @@ async function callGemini({ audioBase64, mimeType, targetLang, model }) {
     },
   };
 
+  // fetch 逾時保護：Gemini API 若卡住不回應，逾時後主動中斷請求並回報錯誤，
+  // 避免 content.js 端的 sendMessage 永遠等不到回應。
+  const FETCH_TIMEOUT_MS = 12000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
     if (!res.ok) {
       const txt = await res.text();
@@ -69,7 +75,12 @@ async function callGemini({ audioBase64, mimeType, targetLang, model }) {
     // text 欄位保留為翻譯，向下相容
     return { ok: true, original, translation, text: translation };
   } catch (err) {
+    if (err.name === "AbortError") {
+      return { ok: false, error: "timeout" };
+    }
     return { ok: false, error: String(err) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
